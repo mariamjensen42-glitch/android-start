@@ -1,10 +1,12 @@
 package dev.androidstart.feature.tasks
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.androidstart.data.TaskRepository
 import dev.androidstart.data.model.Task
+import dev.androidstart.ui.STATE_STOP_TIMEOUT_MILLIS
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -17,8 +19,14 @@ import kotlinx.coroutines.launch
  *
  * 规则：屏幕需要的一切都在这里，不在 Composable 里拼装和推断。
  * 判断"加载中/空/有数据"是 UI 逻辑，写成一个 when 表达式而不是散落的条件。
+ *
+ * `@Immutable` 不是装饰：`List` 是接口，Compose 编译器无法证明它不可变，
+ * 于是把整个 UiState 判为 unstable，导致**每次重组都跳过不了**这个屏幕。
+ * 这里由我们保证不原地修改列表（仓库每次发出新实例），所以标注成立。
+ * 数据量更大、需要结构共享时换成 `ImmutableList` + `persistentListOf()`。
  */
-data class TasksUiState(
+@Immutable
+data class TaskListUiState(
     val tasks: List<Task> = emptyList(),
     val isLoading: Boolean = true,
 ) {
@@ -28,20 +36,20 @@ data class TasksUiState(
 /**
  * 列表页能收到的**全部**用户意图。
  *
- * 这就是 MVI 与"一堆回调 lambda"的实质区别：入口只有 [TasksViewModel.onIntent] 一个，
+ * 这就是 MVI 与"一堆回调 lambda"的实质区别：入口只有 [TaskListViewModel.onIntent] 一个，
  * 所以"用户在这个屏上能做什么"是一个可以一眼读完的清单，
  * 而不是散落在 Screen 签名上的若干函数类型。
  *
  * 加动作的流程是**编译器强制**的：这里加一个实现，`onIntent` 的 `when` 立刻报
  * "not exhaustive"，你不可能漏处理。
  */
-sealed interface TasksIntent {
+sealed interface TaskListIntent {
 
     /** 新建一个任务；[title] 是用户输入的原始文本，去空格由数据层负责。 */
-    data class AddTask(val title: String) : TasksIntent
+    data class AddTask(val title: String) : TaskListIntent
 
     /** 切换某一行的完成状态。 */
-    data class ToggleTask(val id: Long) : TasksIntent
+    data class ToggleTask(val id: Long) : TaskListIntent
 }
 
 /**
@@ -55,7 +63,7 @@ sealed interface TasksIntent {
  * 且这段计算有多个分支要单测时（那时把它抽成纯函数，单测不用起协程）。
  */
 @HiltViewModel
-class TasksViewModel @Inject constructor(
+class TaskListViewModel @Inject constructor(
     private val repository: TaskRepository,
 ) : ViewModel() {
 
@@ -66,19 +74,19 @@ class TasksViewModel @Inject constructor(
      * 写 `SharingStarted.Eagerly` 会让后台的页面也一直在跑（也会一直占着 Room 的查询），
      * 是常见电耗来源。
      */
-    val uiState: StateFlow<TasksUiState> = repository.observeTasks()
-        .map { tasks -> TasksUiState(tasks = tasks, isLoading = false) }
+    val uiState: StateFlow<TaskListUiState> = repository.observeTasks()
+        .map { tasks -> TaskListUiState(tasks = tasks, isLoading = false) }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-            initialValue = TasksUiState(),
+            started = SharingStarted.WhileSubscribed(STATE_STOP_TIMEOUT_MILLIS),
+            initialValue = TaskListUiState(),
         )
 
     /** 唯一入口。事件从 Screen 进来，状态从 [uiState] 出去——单向，没有回头路。 */
-    fun onIntent(intent: TasksIntent) {
+    fun onIntent(intent: TaskListIntent) {
         when (intent) {
-            is TasksIntent.AddTask -> addTask(intent.title)
-            is TasksIntent.ToggleTask -> toggleTask(intent.id)
+            is TaskListIntent.AddTask -> addTask(intent.title)
+            is TaskListIntent.ToggleTask -> toggleTask(intent.id)
         }
     }
 
@@ -89,11 +97,8 @@ class TasksViewModel @Inject constructor(
 
     private fun toggleTask(id: Long) {
         // 从当前状态取，而不是再查一次仓库：多一次挂起往返就多一个竞态窗口。
+        // 状态还没加载出来时列表是空的，这里自然是 no-op——UI 那一刻也不会渲染出复选框。
         val task = uiState.value.tasks.firstOrNull { it.id == id } ?: return
         viewModelScope.launch { repository.setDone(id, done = !task.done) }
-    }
-
-    private companion object {
-        const val STOP_TIMEOUT_MILLIS = 5_000L
     }
 }

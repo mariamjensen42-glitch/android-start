@@ -8,9 +8,9 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.androidstart.data.model.Task
-import dev.androidstart.feature.tasks.TasksIntent
-import dev.androidstart.feature.tasks.TasksScreen
-import dev.androidstart.feature.tasks.TasksUiState
+import dev.androidstart.feature.tasks.TaskListIntent
+import dev.androidstart.feature.tasks.TaskListScreen
+import dev.androidstart.feature.tasks.TaskListUiState
 import dev.androidstart.ui.theme.AndroidStartTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -24,7 +24,7 @@ import org.junit.runner.RunWith
  * 如果哪天有人把 Screen 改成自己去拿 ViewModel，这两个测试会先红。
  */
 @RunWith(AndroidJUnit4::class)
-class TasksScreenTest {
+class TaskListScreenTest {
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -35,8 +35,8 @@ class TasksScreenTest {
     fun emptyState_isShown_whenThereAreNoTasks() {
         composeRule.setContent {
             AndroidStartTheme(dynamicColor = false) {
-                TasksScreen(
-                    uiState = TasksUiState(tasks = emptyList(), isLoading = false),
+                TaskListScreen(
+                    uiState = TaskListUiState(tasks = emptyList(), isLoading = false),
                     onIntent = {},
                     onTaskClick = {},
                 )
@@ -54,8 +54,8 @@ class TasksScreenTest {
 
         composeRule.setContent {
             AndroidStartTheme(dynamicColor = false) {
-                TasksScreen(
-                    uiState = TasksUiState(
+                TaskListScreen(
+                    uiState = TaskListUiState(
                         tasks = listOf(Task(id = 7, title = "被点的那一行")),
                         isLoading = false,
                     ),
@@ -72,12 +72,12 @@ class TasksScreenTest {
 
     @Test
     fun tappingTheCheckbox_emitsAToggleIntent() {
-        var received: TasksIntent? = null
+        var received: TaskListIntent? = null
 
         composeRule.setContent {
             AndroidStartTheme(dynamicColor = false) {
-                TasksScreen(
-                    uiState = TasksUiState(
+                TaskListScreen(
+                    uiState = TaskListUiState(
                         tasks = listOf(Task(id = 7, title = "打勾的那一行", done = false)),
                         isLoading = false,
                     ),
@@ -89,6 +89,6 @@ class TasksScreenTest {
 
         composeRule.onNode(isToggleable()).performClick()
 
-        composeRule.runOnIdle { assertEquals(TasksIntent.ToggleTask(id = 7), received) }
+        composeRule.runOnIdle { assertEquals(TaskListIntent.ToggleTask(id = 7), received) }
     }
 }

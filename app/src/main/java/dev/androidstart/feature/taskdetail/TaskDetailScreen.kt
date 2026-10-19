@@ -63,7 +63,12 @@ fun TaskDetailScreen(
                 },
                 actions = {
                     if (uiState.task != null) {
-                        IconButton(onClick = { onIntent(TaskDetailIntent.Delete) }) {
+                        IconButton(
+                            onClick = { onIntent(TaskDetailIntent.Delete) },
+                            // 删除中禁用：否则用户以为没点上，连点两次会触发两次删除意图
+                            // （ViewModel 也做了幂等，这里是第二道防线，同时给用户明确的视觉反馈）。
+                            enabled = !uiState.isDeleting,
+                        ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_delete),
                                 contentDescription = stringResource(R.string.action_delete),

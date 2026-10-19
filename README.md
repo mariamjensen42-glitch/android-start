@@ -54,11 +54,11 @@ adb shell am start -n dev.androidstart/.MainActivity
 
 ```bash
 # 1. 生成 baseline profile（自己起一台 GMD 模拟器，不用插真机）
-./gradlew :app:generateBaselineProfile
+./gradlew :app:generateBaselineProfile -PallowDebugSigning
 #    产物：app/src/release/generated/baselineProfiles/baseline-prof.txt —— **要提交**
 
 # 2. 量冷启动（Partial = 有 profile，None = 无 profile，两者差值就是收益）
-./gradlew :benchmarks:connectedReleaseAndroidTest
+./gradlew :benchmarks:connectedReleaseAndroidTest -PallowDebugSigning
 ```
 
 **什么时候必须重跑生成**：首屏相关的代码变了（主题、DI 图、首屏 Compose 树、首屏数据源）。
@@ -82,7 +82,6 @@ app/src/main/java/dev/androidstart/
 │   └── RepositoryModule.kt   接口 → 实现（全应用唯一一处选实现的地方）
 ├── data/
 │   ├── TaskRepository.kt     契约：Flow 读、suspend 写
-│   ├── InMemoryTaskRepository.kt  测试与预览用的内存实现
 │   ├── model/Task.kt         领域模型（≠ 数据库实体 ≠ 网络 DTO）
 │   └── local/
 │       ├── TaskEntity.kt     @Entity
@@ -102,7 +101,8 @@ benchmarks/                  性能模块（com.android.test，不产出可安�
 └── StartupBenchmarks.kt          量冷启动：Partial（有 profile）vs None（无 profile）
 ```
 
-测试同构：`app/src/test/...`（JVM 单测）、`app/src/androidTest/...`（Compose UI + DAO 测试）。
+测试同构：`app/src/test/...`（JVM 单测，含 `data/InMemoryTaskRepository.kt` 这个内存假实现）、
+`app/src/androidTest/...`（Compose UI + DAO 测试）。内存实现只在测试里存在——生产包里不该有假数据源。
 
 ## 架构：严格 MVI（`Intent → 状态变更 → UiState`）
 
@@ -118,9 +118,9 @@ benchmarks/                  性能模块（com.android.test，不产出可安�
 于是 Screen 的签名固定成两条通道：
 
 ```kotlin
-fun TasksScreen(
-    uiState: TasksUiState,
-    onIntent: (TasksIntent) -> Unit,     // 所有状态变更
+fun TaskListScreen(
+    uiState: TaskListUiState,
+    onIntent: (TaskListIntent) -> Unit,     // 所有状态变更
     onTaskClick: (Long) -> Unit,         // 导航：例外，见下
 )
 ```
@@ -147,11 +147,13 @@ fun TasksScreen(
   别现在就把测试基础设施铺开。
 - **详情页走 assisted injection 传 `taskId`**，而不是 `SavedStateHandle.get("taskId")`。
   代价是多一个 `@AssistedFactory` 接口；收益是参数类型安全，不会出现"key 拼错只在运行时炸"。
-- **数据库 `fallbackToDestructiveMigration`**。**上线前必须删掉这一行并补 Migration**，
-  否则一次版本升级会静默清空用户数据。这是给"还没有真实用户"阶段留的方便。
-- **release 用 debug 签名**。这样 clone 下来不用任何密钥就能装 release 变体，
-  baseline profile 生成与 macrobenchmark 也都跑在它上面。
-  **上架前必须换成正式签名**（见下面的清单）——否则你会发一个谁都签得出的包。
+- **结构变化时只有可调试包才重建数据库**。`DatabaseModule` 里按 `FLAG_DEBUGGABLE` 判断：
+  开发期改表结构不用写迁移，发布包则**抛异常**（响亮失败）而不是静默清库。
+  代价是发布包升级必须先写好 `Migration` 并登记到 `DatabaseModule.MIGRATIONS`——这是好事。
+- **release 默认不签名**。未签名包装不上、也发不出去，"忘了配签名"会立刻暴露，
+  而不是悄悄用公开的 debug key 签出一个可发布的包。性能测试与 profile 生成确实需要一个
+  可安装的 release 变体，这时显式加 `-PallowDebugSigning`——flag 名字本身就是提醒。
+  正式签名从 CI 注入（见下面的清单）。
 - **Baseline Profile 不自动生成**，见上一节。模板里带它是为了"该做的事已经接好线"，
   而不是让它变成构建的一环。
 - **没有引 ktlint / detekt / spotless**。它们都要额外的插件依赖与版本兼容维护；
@@ -168,8 +170,8 @@ fun TasksScreen(
 | 换成网络数据源 | 加 `data/remote/`（Ktor/Retrofit + DTO + mapper）→ 写实现 `TaskRepository` 的离线优先仓库 → 改 `RepositoryModule` 一行 |
 | 加一个页面 | `navigation/` 加路由 + `entry`，再写 `feature/xxx/` 的 `@HiltViewModel` + Screen |
 | 给仪器测试加假的依赖 | 加 `hilt-android-testing` + `@HiltAndroidTest` + `HiltTestApplication` |
-| 首屏改了想验证收益 | `./gradlew :app:generateBaselineProfile` 重新生成，再跑 `:benchmarks:connectedReleaseAndroidTest` 对比 Partial/None |
-| 上架前 | 删掉 `fallbackToDestructiveMigration`、**把 release 换成正式签名**、配签名（密钥别进仓库）、生成 PNG 图标、跑 `assembleRelease` 并装机冒烟 |
+| 首屏改了想验证收益 | `./gradlew :app:generateBaselineProfile -PallowDebugSigning` 重新生成，再跑 `:benchmarks:connectedReleaseAndroidTest` 对比 Partial/None |
+| 上架前 | 配正式签名（CI 注入，密钥别进仓库）、给发布包补 `Migration`、生成 PNG 图标、跑 `assembleRelease` 并装机冒烟（R8 下 `@Serializable` 路由与 Room 生成代码是重点） |
 
 具体到"文件级"的施工规范看 [AGENTS.md](AGENTS.md)——那份文档同时是给人和给 AI 编码助手看的。
 

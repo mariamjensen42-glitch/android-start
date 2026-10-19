@@ -16,7 +16,7 @@ import org.junit.Test
 /**
  * ViewModel 单测：没有 Robolectric、没有设备、没有 mock 框架。
  *
- * 能这么干净是因为 [TasksViewModel] 只依赖 [dev.androidstart.data.TaskRepository] 接口，
+ * 能这么干净是因为 [TaskListViewModel] 只依赖 [dev.androidstart.data.TaskRepository] 接口，
  * 而 [InMemoryTaskRepository] 本身就是个合格的假实现——
  * **不要**为了测试去引 mockk，先问一句"真实的实现能不能直接用"。
  *
@@ -26,14 +26,14 @@ import org.junit.Test
  * "最终状态"或"仓库收到的写入"。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class TasksViewModelTest {
+class TaskListViewModelTest {
 
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
     @Test
     fun `starts in the loading state before anyone collects`() {
-        val viewModel = TasksViewModel(InMemoryTaskRepository())
+        val viewModel = TaskListViewModel(InMemoryTaskRepository())
 
         // 还没人订阅 → WhileSubscribed 没启动上游 → 还是 initialValue。
         assertTrue(viewModel.uiState.value.isLoading)
@@ -43,7 +43,7 @@ class TasksViewModelTest {
     @Test
     fun `exposes the repository tasks once collected`() = runTest {
         val repository = InMemoryTaskRepository(listOf(Task(id = 1, title = "写个屏幕")))
-        val viewModel = TasksViewModel(repository)
+        val viewModel = TaskListViewModel(repository)
 
         val loaded = viewModel.uiState.first { !it.isLoading }
 
@@ -54,9 +54,9 @@ class TasksViewModelTest {
     @Test
     fun `AddTask intent appends through the repository`() = runTest {
         val repository = InMemoryTaskRepository()
-        val viewModel = TasksViewModel(repository)
+        val viewModel = TaskListViewModel(repository)
 
-        viewModel.onIntent(TasksIntent.AddTask("买牛奶"))
+        viewModel.onIntent(TaskListIntent.AddTask("买牛奶"))
         advanceUntilIdle()
 
         assertEquals(listOf("买牛奶"), repository.observeTasks().first().map { it.title })
@@ -65,9 +65,9 @@ class TasksViewModelTest {
     @Test
     fun `AddTask intent ignores a blank title`() = runTest {
         val repository = InMemoryTaskRepository()
-        val viewModel = TasksViewModel(repository)
+        val viewModel = TaskListViewModel(repository)
 
-        viewModel.onIntent(TasksIntent.AddTask("   "))
+        viewModel.onIntent(TaskListIntent.AddTask("   "))
         advanceUntilIdle()
 
         assertTrue(repository.observeTasks().first().isEmpty())
@@ -76,11 +76,11 @@ class TasksViewModelTest {
     @Test
     fun `ToggleTask intent flips the done flag`() = runTest {
         val repository = InMemoryTaskRepository(listOf(Task(id = 1, title = "a", done = false)))
-        val viewModel = TasksViewModel(repository)
+        val viewModel = TaskListViewModel(repository)
         // toggle 读的是 uiState.value，所以先把状态加载出来，模拟"用户看到了列表"。
         viewModel.uiState.first { !it.isLoading }
 
-        viewModel.onIntent(TasksIntent.ToggleTask(id = 1))
+        viewModel.onIntent(TaskListIntent.ToggleTask(id = 1))
         advanceUntilIdle()
 
         assertTrue(repository.observeTasks().first().single().done)
@@ -89,10 +89,10 @@ class TasksViewModelTest {
     @Test
     fun `ToggleTask intent on an unknown id does nothing`() = runTest {
         val repository = InMemoryTaskRepository(listOf(Task(id = 1, title = "a", done = false)))
-        val viewModel = TasksViewModel(repository)
+        val viewModel = TaskListViewModel(repository)
         viewModel.uiState.first { !it.isLoading }
 
-        viewModel.onIntent(TasksIntent.ToggleTask(id = 99))
+        viewModel.onIntent(TaskListIntent.ToggleTask(id = 99))
         advanceUntilIdle()
 
         assertFalse(repository.observeTasks().first().single().done)
@@ -101,9 +101,9 @@ class TasksViewModelTest {
     @Test
     fun `uiState follows repository changes`() = runTest {
         val repository = InMemoryTaskRepository()
-        val viewModel = TasksViewModel(repository)
+        val viewModel = TaskListViewModel(repository)
 
-        viewModel.onIntent(TasksIntent.AddTask("a"))
+        viewModel.onIntent(TaskListIntent.AddTask("a"))
         advanceUntilIdle()
         repository.add("b")
 

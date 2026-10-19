@@ -21,6 +21,20 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+/**
+ * release 的签名策略：**默认不签名**。
+ *
+ * 未签名的 release APK 装不上、也发不出去——这正是我们要的默认：
+ * 让"忘了配置正式签名"变成一件立刻能发现的事，而不是悄悄用 debug key 签出一个可发布的包
+ * （debug keystore 是公开的，任何人都能造同签名同包名的"更新"）。
+ *
+ * 性能测试与 baseline profile 生成需要一个**可安装**的 release 变体，这时显式打开：
+ *   ./gradlew :app:generateBaselineProfile -PallowDebugSigning
+ * flag 名字本身就在提醒你：这是本地临时用途，不是发布配置。
+ */
+val allowDebugSigningForRelease =
+    providers.gradleProperty("allowDebugSigning").orNull?.toBooleanStrictOrNull() ?: false
+
 android {
     namespace = "dev.androidstart"
 
@@ -51,10 +65,9 @@ android {
             optimization {
                 enable = true
             }
-            // 用 debug 签名：让 clone 下来的人**不需要任何密钥**就能装 release 变体，
-            // baseline profile 生成和 macrobenchmark 也都是跑在这个变体上。
-            // 上架前必须换成正式签名——见 README《上架前》清单。
-            signingConfig = signingConfigs.getByName("debug")
+            // 见文件顶部：默认无签名；只有显式 -PallowDebugSigning 才退回 debug key。
+            signingConfig = signingConfigs.findByName("release")
+                ?: if (allowDebugSigningForRelease) signingConfigs.getByName("debug") else null
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

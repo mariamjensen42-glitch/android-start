@@ -40,16 +40,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.androidstart.R
 import dev.androidstart.data.model.Task
-import dev.androidstart.ui.theme.AndroidStartTheme
 
 /**
  * 任务列表页。
  *
- * 这个 Composable **只负责画**：状态从外面进来，用户意图用 [TasksIntent] 抛出去。
+ * 这个 Composable **只负责画**：状态从外面进来，用户意图用 [TaskListIntent] 抛出去。
  * 没有 `viewModel()` 调用、没有仓库引用——所以它能被 Preview 和
  * `createComposeRule()` 直接渲染，不需要任何 DI。
  *
@@ -59,9 +57,9 @@ import dev.androidstart.ui.theme.AndroidStartTheme
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TasksScreen(
-    uiState: TasksUiState,
-    onIntent: (TasksIntent) -> Unit,
+fun TaskListScreen(
+    uiState: TaskListUiState,
+    onIntent: (TaskListIntent) -> Unit,
     onTaskClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -114,12 +112,13 @@ fun TasksScreen(
 
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 8.dp),
+                    // 底部留出 FAB 的高度，否则最后一项会被悬浮按钮压住。
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp),
                 ) {
                     items(items = uiState.tasks, key = { task -> task.id }) { task ->
                         TaskRow(
                             task = task,
-                            onToggle = { onIntent(TasksIntent.ToggleTask(task.id)) },
+                            onToggle = { onIntent(TaskListIntent.ToggleTask(task.id)) },
                             onClick = { onTaskClick(task.id) },
                         )
                     }
@@ -132,7 +131,7 @@ fun TasksScreen(
         AddTaskDialog(
             onDismiss = { showAddDialog = false },
             onConfirm = { title ->
-                onIntent(TasksIntent.AddTask(title))
+                onIntent(TaskListIntent.AddTask(title))
                 showAddDialog = false
             },
         )
@@ -231,49 +230,4 @@ private fun AddTaskDialog(
 
     // 弹窗一出现就聚焦输入框，省掉一次多余的点击。
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
-}
-
-// --- 预览 ------------------------------------------------------------------
-// 预览直接喂状态，不走 ViewModel：这样以后状态变多也不会把预览拖垮。
-
-private val PreviewTasks = listOf(
-    Task(id = 1, title = "接一个真实的数据源（Room / 网络）", done = false),
-    Task(id = 2, title = "把列表拆成独立 feature 模块", done = true),
-    Task(id = 3, title = "接上 CI", done = false),
-)
-
-@Preview(name = "列表 · 亮色", showBackground = true)
-@Composable
-private fun TasksScreenPreview() {
-    AndroidStartTheme(dynamicColor = false) {
-        TasksScreen(
-            uiState = TasksUiState(tasks = PreviewTasks, isLoading = false),
-            onIntent = {},
-            onTaskClick = {},
-        )
-    }
-}
-
-@Preview(name = "列表 · 暗色", showBackground = true)
-@Composable
-private fun TasksScreenDarkPreview() {
-    AndroidStartTheme(darkTheme = true, dynamicColor = false) {
-        TasksScreen(
-            uiState = TasksUiState(tasks = PreviewTasks, isLoading = false),
-            onIntent = {},
-            onTaskClick = {},
-        )
-    }
-}
-
-@Preview(name = "空状态", showBackground = true)
-@Composable
-private fun TasksScreenEmptyPreview() {
-    AndroidStartTheme(dynamicColor = false) {
-        TasksScreen(
-            uiState = TasksUiState(tasks = emptyList(), isLoading = false),
-            onIntent = {},
-            onTaskClick = {},
-        )
-    }
 }

@@ -1,5 +1,6 @@
 package dev.androidstart.navigation
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -15,8 +16,8 @@ import androidx.navigation3.ui.NavDisplay
 import dev.androidstart.feature.taskdetail.TaskDetailEffect
 import dev.androidstart.feature.taskdetail.TaskDetailScreen
 import dev.androidstart.feature.taskdetail.TaskDetailViewModel
-import dev.androidstart.feature.tasks.TasksScreen
-import dev.androidstart.feature.tasks.TasksViewModel
+import dev.androidstart.feature.tasks.TaskListScreen
+import dev.androidstart.feature.tasks.TaskListViewModel
 import kotlinx.serialization.Serializable
 
 /**
@@ -27,7 +28,7 @@ import kotlinx.serialization.Serializable
  * 存进 savedInstanceState，进程被回收后能原样恢复。
  */
 @Serializable
-data object TasksRoute : NavKey
+data object TaskListRoute : NavKey
 
 @Serializable
 data class TaskDetailRoute(val taskId: Long) : NavKey
@@ -43,13 +44,22 @@ data class TaskDetailRoute(val taskId: Long) : NavKey
 @Composable
 fun AppNavDisplay(modifier: Modifier = Modifier) {
     // 返回栈跨配置变更与进程死亡自动恢复（因为 key 都可序列化）。
-    val backStack = rememberNavBackStack(TasksRoute)
+    val backStack = rememberNavBackStack(TaskListRoute)
+    val activity = LocalActivity.current
 
     NavDisplay(
         modifier = modifier,
         backStack = backStack,
         // 系统返回 / 返回手势。
-        onBack = { backStack.removeLastOrNull() },
+        // 根页面**不能**直接 removeLastOrNull()：那会把栈清空，页面变一片空白。
+        // 交给系统退出（finish）才是用户预期。
+        onBack = {
+            if (backStack.size > 1) {
+                backStack.removeLastOrNull()
+            } else {
+                activity?.finish()
+            }
+        },
         // 这两个装饰器缺一不可：
         // - SaveableStateHolder：每个页面的 rememberSaveable 各存各的；
         // - ViewModelStore：每个 NavEntry 一份 ViewModel，返回时状态还在。
@@ -59,11 +69,11 @@ fun AppNavDisplay(modifier: Modifier = Modifier) {
             rememberViewModelStoreNavEntryDecorator(),
         ),
         entryProvider = entryProvider {
-            entry<TasksRoute> {
-                val viewModel: TasksViewModel = hiltViewModel()
+            entry<TaskListRoute> {
+                val viewModel: TaskListViewModel = hiltViewModel()
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-                TasksScreen(
+                TaskListScreen(
                     uiState = uiState,
                     onIntent = viewModel::onIntent,
                     onTaskClick = { taskId -> backStack.add(TaskDetailRoute(taskId)) },

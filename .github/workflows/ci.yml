@@ -121,7 +121,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Generate baseline profile
-        run: ./gradlew :app:generateBaselineProfile --stacktrace
+        run: ./gradlew :app:generateBaselineProfile -PallowDebugSigning --stacktrace
 
       # 产物要提交回仓库：它是打进包里的东西，不是可丢弃的构建输出。
       - name: Upload baseline profile

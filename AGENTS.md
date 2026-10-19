@@ -22,8 +22,8 @@ KSP 的报错（缺迁移、缺绑定、`@Assisted` 用法不对）都在这一�
 
 ```bash
 ./gradlew connectedDebugAndroidTest        # Compose UI + Room DAO 测试
-./gradlew :app:generateBaselineProfile     # 重新生成 baseline profile（自起 GMD）
-./gradlew :benchmarks:connectedReleaseAndroidTest   # 量冷启动
+./gradlew :app:generateBaselineProfile -PallowDebugSigning   # 生成 profile（自起 GMD；release 默认无签名）
+./gradlew :benchmarks:connectedReleaseAndroidTest -PallowDebugSigning   # 量冷启动
 ```
 
 **Definition of Done**：`./gradlew assembleDebug testDebugUnitTest lint` 三条全绿，
@@ -55,7 +55,7 @@ KSP 的报错（缺迁移、缺绑定、`@Assisted` 用法不对）都在这一�
    仓库接口不接受回调，不返回一次性快照给 UI。数据变了 UI 自己重组，没有"手动刷新"这种东西。
 
 5. **先问真实现能不能当假实现。**
-   测试优先用 `InMemoryTaskRepository` 这类真实的内存实现（接口一样、语义一致）。
+   测试优先用 `InMemoryTaskRepository` 这类真实的内存实现（接口一样、语义一致，它住在 `src/test`）。
    要引 mock 框架之前先说服自己为什么真实现不够——多数时候是够的。
    Room 只有在**真 SQLite**上才测得准，所以 DAO 用仪器测试，不要用 Robolectric 模拟。
 
@@ -126,7 +126,7 @@ feature/*  ──▶  data (接口)  ◀──  RoomTaskRepository（data/local�
 ### 改表结构 / 加表
 1. 改 `TaskEntity`（或新建实体）→ `@Database(entities = [...])` 里登记
 2. `AndroidStartDatabase` 的 `version` +1
-3. 写 `Migration` 并加进 `DatabaseModule` 的 `addMigrations(...)`（**先删掉 `fallbackToDestructiveMigration`**）
+3. 写 `Migration` 并登记到 `DatabaseModule.MIGRATIONS`（发布包缺迁移会抛异常，这是故意的）
 4. 跑构建：Room 会拿 `app/schemas/` 里的旧快照跟新结构比，缺迁移直接编译失败
 5. 提交时把 `app/schemas/<新版本>.json` 一起带上——它是迁移的对照物，丢了等于以后没法校验
 
@@ -144,9 +144,9 @@ feature/*  ──▶  data (接口)  ◀──  RoomTaskRepository（data/local�
 4. 具体步骤照官方文档走，**不要**为了让测试跑起来改生产代码的注入方式
 
 ### 改了首屏（主题 / DI 图 / 首屏 Compose 树 / 首屏数据源）
-1. 跑 `./gradlew :app:generateBaselineProfile`（自己起 GMD，不需要插真机）
+1. 跑 `./gradlew :app:generateBaselineProfile -PallowDebugSigning`（自己起 GMD，不需要插真机）
 2. 把 `app/src/release/generated/baselineProfiles/baseline-prof.txt` 的变化一起提交
-3. 想验证收益就再跑 `./gradlew :benchmarks:connectedReleaseAndroidTest`，对比 `Partial` 与 `None`
+3. 想验证收益就再跑 `./gradlew :benchmarks:connectedReleaseAndroidTest -PallowDebugSigning`，对比 `Partial` 与 `None`
 4. **不要**为了"保险"把生成任务挂进 `assemble` 或 CI 的自动流程——它要设备、要几分钟
 
 ### 加权限 / 系统能力
@@ -173,7 +173,8 @@ feature/*  ──▶  data (接口)  ◀──  RoomTaskRepository（data/local�
 - **文件组织：一屏一个 `XxxViewModel.kt`**，里面放 `XxxUiState` + `XxxIntent`（+ `XxxEffect`）+ ViewModel；
   屏幕文件里放 `XxxScreen` + 私有 Composable + Preview。三者是**一起变**的，拆开只会让"加一个动作"从改 1 个文件变成改 3 个。
   什么时候才拆出 `XxxContract.kt`：单文件 > 250 行、Intent > 10 个、或契约被第二处消费（共享 UI 组件 / 独立测试模块）。
-  屏幕文件超过 ~300 行时，先挪 Preview（`XxxScreenPreviews.kt`），别拆契约。
+  预览代码超过屏幕文件的三分之一、或屏幕文件接近 300 行时，挪到 `XxxScreenPreviews.kt`（本仓库的两个屏都这么做），别拆契约。
+- `XxxUiState` 一律加 `@Immutable`：`List` 是接口，Compose 无法证明不可变就会把整个屏幕判为 unstable，重组跳过不了。
 - 所有面向用户的字符串走 `stringResource`；`contentDescription` 必须给（纯装饰才用 `null`）。
 - 日志：只在失败路径打，且带可搜的关键字。不要 `println`。
 - 注释解释**为什么**，不解释**是什么**。看到"// 设置 title"这种就删掉。
@@ -227,7 +228,9 @@ feature/*  ──▶  data (接口)  ◀──  RoomTaskRepository（data/local�
 - ❌ 在 `feature/*Screen.kt` 里调 `hiltViewModel()` / `viewModel()`（只有 `navigation/` 可以）
 - ❌ ViewModel 里出现 `Context`、`TaskEntity`、`TaskDao`（要 Context 说明职责放错了层）
 - ❌ 把一次性事件（"删完了/要弹 toast"）塞进 `UiState`（状态会被重放，旋屏时重复触发）
-- ❌ 带着 `fallbackToDestructiveMigration` 上架（升级会静默清空用户数据）
+- ❌ 让发布包走 `fallbackToDestructiveMigration`（升级会静默清空用户数据；只有可调试包允许重建）
+- ❌ 用 `-PallowDebugSigning` 打要发出去的包（debug keystore 是公开的）
+- ❌ 在根页面 `removeLastOrNull()` 把返回栈清空（应交给系统 finish）
 - ❌ 把 `generateBaselineProfile` 挂进 `assemble` 或 CI 自动流程（会要求设备）
 - ❌ 改 `applicationId` 而不同步 `benchmarks/.../TargetApp.kt` 的 `TARGET_PACKAGE`
 - ❌ 把 `app/src/release/generated/baselineProfiles/` 加进 `.gitignore`（那是产物进包的东西）
