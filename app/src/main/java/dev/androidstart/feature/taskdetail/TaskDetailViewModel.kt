@@ -8,9 +8,12 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.androidstart.data.TaskRepository
 import dev.androidstart.data.model.Task
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -22,6 +25,28 @@ data class TaskDetailUiState(
     val task: Task? = null,
     val isLoading: Boolean = true,
 )
+
+/** 详情页能收到的全部用户意图。 */
+sealed interface TaskDetailIntent {
+    data class SetDone(val done: Boolean) : TaskDetailIntent
+
+    /** 删除当前任务。删完要离开这个页面，见 [TaskDetailEffect]。 */
+    data object Delete : TaskDetailIntent
+}
+
+/**
+ * 一次性的**副作用**（effect）：不是状态，不该放进 [TaskDetailUiState]。
+ *
+ * 为什么不用 UiState 表达"刚被删除了"：状态会被重放。旋屏、进程恢复、
+ * 重订阅都会让"已删除 = true"再出现一次，于是页面被连续弹两次——
+ * 这就是经典的"一次性事件当状态用"的坑。
+ *
+ * 用 `Channel` 而不是 `SharedFlow`：Channel 是队列语义，**每个事件只投递一次**，
+ * 且在没有订阅者时缓冲（`Channel.BUFFERED`），不会丢。
+ */
+sealed interface TaskDetailEffect {
+    data object TaskDeleted : TaskDetailEffect
+}
 
 /**
  * 详情页 ViewModel。
@@ -47,12 +72,30 @@ class TaskDetailViewModel @AssistedInject constructor(
             initialValue = TaskDetailUiState(),
         )
 
-    fun setDone(done: Boolean) {
+    private val _effects = Channel<TaskDetailEffect>(capacity = Channel.BUFFERED)
+
+    /**
+     * 由导航层（`AppNavigation`）收集并决定怎么响应——ViewModel 不碰导航。
+     * 这样"删完返回上一页"是导航层的决定，而不是写死在业务逻辑里。
+     */
+    val effects: Flow<TaskDetailEffect> = _effects.receiveAsFlow()
+
+    fun onIntent(intent: TaskDetailIntent) {
+        when (intent) {
+            is TaskDetailIntent.SetDone -> setDone(intent.done)
+            TaskDetailIntent.Delete -> delete()
+        }
+    }
+
+    private fun setDone(done: Boolean) {
         viewModelScope.launch { repository.setDone(taskId, done) }
     }
 
-    fun delete() {
-        viewModelScope.launch { repository.delete(taskId) }
+    private fun delete() {
+        viewModelScope.launch {
+            repository.delete(taskId)
+            _effects.send(TaskDetailEffect.TaskDeleted)
+        }
     }
 
     /**

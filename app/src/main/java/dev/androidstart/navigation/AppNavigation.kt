@@ -1,6 +1,7 @@
 package dev.androidstart.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -11,6 +12,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import dev.androidstart.feature.taskdetail.TaskDetailEffect
 import dev.androidstart.feature.taskdetail.TaskDetailScreen
 import dev.androidstart.feature.taskdetail.TaskDetailViewModel
 import dev.androidstart.feature.tasks.TasksScreen
@@ -63,8 +65,7 @@ fun AppNavDisplay(modifier: Modifier = Modifier) {
 
                 TasksScreen(
                     uiState = uiState,
-                    onAddTask = viewModel::addTask,
-                    onToggleTask = viewModel::toggleTask,
+                    onIntent = viewModel::onIntent,
                     onTaskClick = { taskId -> backStack.add(TaskDetailRoute(taskId)) },
                 )
             }
@@ -76,13 +77,19 @@ fun AppNavDisplay(modifier: Modifier = Modifier) {
                 )
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+                // ViewModel 只会说"这件事发生了"，怎么响应由导航层决定。
+                // 一次性副作用在导航层收口，Screen 不需要知道删除意味着要离开。
+                LaunchedEffect(viewModel) {
+                    viewModel.effects.collect { effect ->
+                        when (effect) {
+                            TaskDetailEffect.TaskDeleted -> backStack.removeLastOrNull()
+                        }
+                    }
+                }
+
                 TaskDetailScreen(
                     uiState = uiState,
-                    onToggleDone = viewModel::setDone,
-                    onDelete = {
-                        viewModel.delete()
-                        backStack.removeLastOrNull()
-                    },
+                    onIntent = viewModel::onIntent,
                     onBack = { backStack.removeLastOrNull() },
                 )
             }

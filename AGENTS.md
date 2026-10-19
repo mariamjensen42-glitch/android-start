@@ -33,9 +33,10 @@ KSP 的报错（缺迁移、缺绑定、`@Assisted` 用法不对）都在这一�
 
 ## 2. 五条铁律
 
-1. **UI 只画状态，不问数据。**
-   `feature/*/XxxScreen.kt` 里不允许出现 `viewModel()`、`Repository`、`Context` 取数据、
-   协程 `launch`。Screen 的签名永远是 `(uiState, on事件...)`。
+1. **UI 只画状态，不问数据（MVI 契约）。**
+   `feature/*/XxxScreen.kt` 里不允许出现 `hiltViewModel()`、`Repository`、`Context` 取数据、
+   协程 `launch`。Screen 的签名只有两条通道：`(uiState: XxxUiState, onIntent: (XxxIntent) -> Unit)`。
+   导航是唯一例外（`onTaskClick` / `onBack` 这类由导航层给的 lambda）——导航不是状态，不上 Intent。
    这样 Preview 和 Compose UI 测试才能不依赖 DI 地渲染它。
 
 2. **依赖从构造函数进来，装配交给 Hilt。**
@@ -43,9 +44,12 @@ KSP 的报错（缺迁移、缺绑定、`@Assisted` 用法不对）都在这一�
    `application as XxxApp`、或自己 new 一个仓库。唯一的例外是 `AndroidStartApp`（`@HiltAndroidApp`）
    与 `MainActivity`（`@AndroidEntryPoint`）。**"选哪个实现"只允许出现在 `di/` 里。**
 
-3. **状态只有一个出口。**
-   每屏一个 `data class XxxUiState`，由 `StateFlow` 暴露，UI 用 `collectAsStateWithLifecycle()` 收。
+3. **状态一个出口、事件一个入口。**
+   每屏一个 `data class XxxUiState`，由 `StateFlow` 暴露，UI 用 `collectAsStateWithLifecycle()` 收；
+   用户的每个动作都是一个 `XxxIntent`，只能经 `onIntent()` 进 ViewModel。
    不要在 Composable 里 `remember` 业务状态，也不要让 UI 自己推断"加载中还是空"——那属于 UiState。
+   **一次性事件**（"删完了要离开页面"）走 `Channel` 暴露的 `effects`，由导航层收集；
+   千万别把它塞进 UiState（状态会被重放，旋屏时会连续弹两次）。
 
 4. **读用 Flow，写用 suspend。**
    仓库接口不接受回调，不返回一次性快照给 UI。数据变了 UI 自己重组，没有"手动刷新"这种东西。
@@ -111,10 +115,13 @@ feature/*  ──▶  data (接口)  ◀──  RoomTaskRepository（data/local�
 1. `navigation/AppNavigation.kt` 加 `@Serializable data class XxxRoute(...) : NavKey`
 2. 同文件 `entryProvider` 里加 `entry<XxxRoute> { route -> ... }`，用 `hiltViewModel()` 拿 ViewModel
    （需要运行时参数就用 assisted factory，见 `TaskDetailViewModel` 的写法）
-3. 新建 `feature/xxx/XxxViewModel.kt`：`XxxUiState` + `StateFlow` + 事件函数，
+3. 新建 `feature/xxx/XxxViewModel.kt`：`XxxUiState` + `sealed interface XxxIntent` +
+   `onIntent()`（`when` 必须穷尽，加 Intent 时编译器会提醒）+ `StateFlow`，
    类上加 `@HiltViewModel`、构造参数加 `@Inject`
-4. 新建 `feature/xxx/XxxScreen.kt`：只接 `uiState` 和 lambda；文件末尾至少一个 `@Preview`
-5. 测试：`XxxViewModelTest`（直接 new，传内存仓库）；Screen 有一个 UI 测试覆盖关键交互
+4. 有"做完就该离开/弹提示"的动作时，加 `sealed interface XxxEffect` + `Channel` 暴露 `effects`，
+   在 **导航层** 收（不要把 effect 塞进 UiState）
+5. 新建 `feature/xxx/XxxScreen.kt`：只接 `(uiState, onIntent)` 和导航 lambda；文件末尾至少一个 `@Preview`
+6. 测试：`XxxViewModelTest`（直接 new，传内存仓库）；Screen 有一个 UI 测试覆盖关键交互
 
 ### 改表结构 / 加表
 1. 改 `TaskEntity`（或新建实体）→ `@Database(entities = [...])` 里登记
@@ -180,6 +187,12 @@ feature/*  ──▶  data (接口)  ◀──  RoomTaskRepository（data/local�
 - 命名：`` `when something then expectation` `` 反引号可读句子，测的就是这句话。
 - 每个断言都要有失败时能看懂的信息（`assertEquals("任务标题", expected, actual)`）。
 - 测试里不 sleep、不用真延迟。需要控制时间就用 `runTest` 的虚拟时钟。
+- **不要数"第几个事件"**。`stateIn(WhileSubscribed)` 会发几个中间值取决于调度器实现，
+  依赖它写出来的断言会随机红。断言"最终状态"（`uiState.first { !it.isLoading }`）或
+  "仓库收到的写入"，比断言事件序列稳定得多。
+- 主调度器用 `StandardTestDispatcher`（`MainDispatcherRule` 的默认值）：unconfined 会让
+  `stateIn` 在订阅瞬间同步跑完上游，顺序就不再确定。代价是动作类断言后面要 `advanceUntilIdle()`。
+- `effects` 用 Turbine 测**恰好一次**：`effects.test { onIntent(...); advanceUntilIdle(); assertEquals(Effect, awaitItem()); expectNoEvents() }`。
 
 ---
 
@@ -209,6 +222,7 @@ feature/*  ──▶  data (接口)  ◀──  RoomTaskRepository（data/local�
 - ❌ 在 Composable 里直接读仓库 / 起协程 / 拿 `Context` 做业务
 - ❌ 在 `feature/*Screen.kt` 里调 `hiltViewModel()` / `viewModel()`（只有 `navigation/` 可以）
 - ❌ ViewModel 里出现 `Context`、`TaskEntity`、`TaskDao`（要 Context 说明职责放错了层）
+- ❌ 把一次性事件（"删完了/要弹 toast"）塞进 `UiState`（状态会被重放，旋屏时重复触发）
 - ❌ 带着 `fallbackToDestructiveMigration` 上架（升级会静默清空用户数据）
 - ❌ 把 `generateBaselineProfile` 挂进 `assemble` 或 CI 自动流程（会要求设备）
 - ❌ 改 `applicationId` 而不同步 `benchmarks/.../TargetApp.kt` 的 `TARGET_PACKAGE`

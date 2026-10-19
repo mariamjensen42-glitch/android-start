@@ -1,12 +1,14 @@
 package dev.androidstart
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.androidstart.data.model.Task
+import dev.androidstart.feature.tasks.TasksIntent
 import dev.androidstart.feature.tasks.TasksScreen
 import dev.androidstart.feature.tasks.TasksUiState
 import dev.androidstart.ui.theme.AndroidStartTheme
@@ -18,8 +20,8 @@ import org.junit.runner.RunWith
 /**
  * Compose UI 测试：跑在设备/模拟器上（`./gradlew connectedDebugAndroidTest`）。
  *
- * 只测两件容易被改坏的事：空状态真的显示了、点一行真的把 id 抛给了上层。
- * 文案从资源里取，改文案不会碎测试。
+ * 测的就是 MVI 契约本身：**状态进来、意图出去**。
+ * 如果哪天有人把 Screen 改成自己去拿 ViewModel，这两个测试会先红。
  */
 @RunWith(AndroidJUnit4::class)
 class TasksScreenTest {
@@ -35,8 +37,7 @@ class TasksScreenTest {
             AndroidStartTheme(dynamicColor = false) {
                 TasksScreen(
                     uiState = TasksUiState(tasks = emptyList(), isLoading = false),
-                    onAddTask = {},
-                    onToggleTask = {},
+                    onIntent = {},
                     onTaskClick = {},
                 )
             }
@@ -58,8 +59,7 @@ class TasksScreenTest {
                         tasks = listOf(Task(id = 7, title = "被点的那一行")),
                         isLoading = false,
                     ),
-                    onAddTask = {},
-                    onToggleTask = {},
+                    onIntent = {},
                     onTaskClick = { clickedId = it },
                 )
             }
@@ -68,5 +68,27 @@ class TasksScreenTest {
         composeRule.onNodeWithText("被点的那一行").performClick()
 
         composeRule.runOnIdle { assertEquals(7L, clickedId) }
+    }
+
+    @Test
+    fun tappingTheCheckbox_emitsAToggleIntent() {
+        var received: TasksIntent? = null
+
+        composeRule.setContent {
+            AndroidStartTheme(dynamicColor = false) {
+                TasksScreen(
+                    uiState = TasksUiState(
+                        tasks = listOf(Task(id = 7, title = "打勾的那一行", done = false)),
+                        isLoading = false,
+                    ),
+                    onIntent = { received = it },
+                    onTaskClick = {},
+                )
+            }
+        }
+
+        composeRule.onNode(isToggleable()).performClick()
+
+        composeRule.runOnIdle { assertEquals(TasksIntent.ToggleTask(id = 7), received) }
     }
 }

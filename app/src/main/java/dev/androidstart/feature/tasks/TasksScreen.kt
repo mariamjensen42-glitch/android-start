@@ -49,16 +49,19 @@ import dev.androidstart.ui.theme.AndroidStartTheme
 /**
  * 任务列表页。
  *
- * 这个 Composable **只负责画**：状态从外面进来，事件用 lambda 抛出去。
+ * 这个 Composable **只负责画**：状态从外面进来，用户意图用 [TasksIntent] 抛出去。
  * 没有 `viewModel()` 调用、没有仓库引用——所以它能被 Preview 和
  * `createComposeRule()` 直接渲染，不需要任何 DI。
+ *
+ * 签名只有两条通道：[uiState] 进来、[onIntent] 出去。这就是 MVI 的全部约束。
+ * [onTaskClick] 是个例外：导航不是"状态变更"，所以它是导航层给的 lambda，
+ * 不走 Intent（走 Intent 就得为它引入 effect，收益不抵成本）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TasksScreen(
     uiState: TasksUiState,
-    onAddTask: (String) -> Unit,
-    onToggleTask: (Long) -> Unit,
+    onIntent: (TasksIntent) -> Unit,
     onTaskClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -116,7 +119,7 @@ fun TasksScreen(
                     items(items = uiState.tasks, key = { task -> task.id }) { task ->
                         TaskRow(
                             task = task,
-                            onToggle = { onToggleTask(task.id) },
+                            onToggle = { onIntent(TasksIntent.ToggleTask(task.id)) },
                             onClick = { onTaskClick(task.id) },
                         )
                     }
@@ -129,7 +132,7 @@ fun TasksScreen(
         AddTaskDialog(
             onDismiss = { showAddDialog = false },
             onConfirm = { title ->
-                onAddTask(title)
+                onIntent(TasksIntent.AddTask(title))
                 showAddDialog = false
             },
         )
@@ -245,8 +248,7 @@ private fun TasksScreenPreview() {
     AndroidStartTheme(dynamicColor = false) {
         TasksScreen(
             uiState = TasksUiState(tasks = PreviewTasks, isLoading = false),
-            onAddTask = {},
-            onToggleTask = {},
+            onIntent = {},
             onTaskClick = {},
         )
     }
@@ -258,8 +260,7 @@ private fun TasksScreenDarkPreview() {
     AndroidStartTheme(darkTheme = true, dynamicColor = false) {
         TasksScreen(
             uiState = TasksUiState(tasks = PreviewTasks, isLoading = false),
-            onAddTask = {},
-            onToggleTask = {},
+            onIntent = {},
             onTaskClick = {},
         )
     }
@@ -271,8 +272,7 @@ private fun TasksScreenEmptyPreview() {
     AndroidStartTheme(dynamicColor = false) {
         TasksScreen(
             uiState = TasksUiState(tasks = emptyList(), isLoading = false),
-            onAddTask = {},
-            onToggleTask = {},
+            onIntent = {},
             onTaskClick = {},
         )
     }

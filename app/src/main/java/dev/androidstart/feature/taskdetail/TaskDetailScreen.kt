@@ -34,16 +34,17 @@ import dev.androidstart.data.model.Task
 import dev.androidstart.ui.theme.AndroidStartTheme
 
 /**
- * 任务详情页。同样只画状态、不问数据。
+ * 任务详情页。同样只画状态、不问数据：状态进来，意图出去。
  *
- * `onDelete` 由上层组合"删掉 + 退回列表"两件事——ViewModel 不该知道导航。
+ * 删除是 Intent（`TaskDetailIntent.Delete`），"删完返回"是 ViewModel 通过
+ * `effects` 通知导航层的结果——这里不做"删掉 + 后退"的拼接，
+ * 因为那样等于让 UI 知道删除会离开页面这件事。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskDetailScreen(
     uiState: TaskDetailUiState,
-    onToggleDone: (Boolean) -> Unit,
-    onDelete: () -> Unit,
+    onIntent: (TaskDetailIntent) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -62,7 +63,7 @@ fun TaskDetailScreen(
                 },
                 actions = {
                     if (uiState.task != null) {
-                        IconButton(onClick = onDelete) {
+                        IconButton(onClick = { onIntent(TaskDetailIntent.Delete) }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_delete),
                                 contentDescription = stringResource(R.string.action_delete),
@@ -96,7 +97,7 @@ fun TaskDetailScreen(
 
                 else -> TaskContent(
                     task = task,
-                    onToggleDone = onToggleDone,
+                    onToggleDone = { done -> onIntent(TaskDetailIntent.SetDone(done)) },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -156,8 +157,7 @@ private fun TaskDetailScreenPreview() {
                 task = Task(id = 1, title = "接一个真实的数据源", done = false),
                 isLoading = false,
             ),
-            onToggleDone = {},
-            onDelete = {},
+            onIntent = {},
             onBack = {},
         )
     }
@@ -169,8 +169,7 @@ private fun TaskDetailScreenMissingPreview() {
     AndroidStartTheme(dynamicColor = false) {
         TaskDetailScreen(
             uiState = TaskDetailUiState(task = null, isLoading = false),
-            onToggleDone = {},
-            onDelete = {},
+            onIntent = {},
             onBack = {},
         )
     }

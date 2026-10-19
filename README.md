@@ -104,6 +104,40 @@ benchmarks/                  性能模块（com.android.test，不产出可安�
 
 测试同构：`app/src/test/...`（JVM 单测）、`app/src/androidTest/...`（Compose UI + DAO 测试）。
 
+## 架构：严格 MVI（`Intent → 状态变更 → UiState`）
+
+每屏三件东西，加一条边界：
+
+| 东西 | 位置 | 作用 |
+|---|---|---|
+| `XxxUiState` | `feature/xxx/XxxViewModel.kt` | 屏幕要画的**全部**状态，一个不可变 data class |
+| `XxxIntent` | 同上（`sealed interface`） | 用户在这个屏上能做的**全部**动作，一眼能读完 |
+| `onIntent()` | 同上 | 唯一入口；`when` 穷尽，加一个 Intent 编译器就逼你处理 |
+| `XxxEffect` | 同上（需要时） | 一次性事件（"删完了该离开"），走 `Channel`，由**导航层**收集 |
+
+于是 Screen 的签名固定成两条通道：
+
+```kotlin
+fun TasksScreen(
+    uiState: TasksUiState,
+    onIntent: (TasksIntent) -> Unit,     // 所有状态变更
+    onTaskClick: (Long) -> Unit,         // 导航：例外，见下
+)
+```
+
+三个刻意的决定：
+
+- **导航 Lambda 不上 Intent。** 导航不是状态；把它塞进 Intent 就得为它引入 effect 通道，
+  成本大于收益。所以 `onTaskClick` / `onBack` 仍由导航层直接给。
+- **一次性事件不进 `UiState`。** 状态会被重放（旋屏、进程恢复、重订阅），
+  "已删除 = true" 会连续触发两次、页面被连弹两次。`Channel` + `receiveAsFlow()` 保证每个事件只投递一次。
+- **没有单独的 `reduce(state, intent)` 抽象。** 现在状态变换只是"仓库的 Flow 映射一遍"，
+  多一层 reducer 会把同样的信息写两遍。什么时候该抽：某个 Intent 需要**基于旧状态**算出新状态、
+  且有多个分支要单测时——那时抽成纯函数，测试连协程都不用起。
+
+对应的测试策略：ViewModel 单测**不数"第几个事件"**（那取决于调度器实现细节），
+只断言最终状态或仓库收到的写入；`effects` 用 Turbine 断言"恰好一次"。细则见 [AGENTS.md](AGENTS.md)。
+
 ## 已经替你做的决定（以及代价）
 
 - **单模块**。一个 `:app`，按包分层。等某个 feature 的编译时间或团队边界真的疼了再拆模块——

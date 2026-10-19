@@ -6,6 +6,7 @@ import dev.androidstart.data.InMemoryTaskRepository
 import dev.androidstart.data.model.Task
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -20,54 +21,62 @@ class TaskDetailViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
+    private fun repositoryWith(vararg tasks: Task) = InMemoryTaskRepository(tasks.toList())
+
+    @Test
+    fun `starts in the loading state before anyone collects`() {
+        val viewModel = TaskDetailViewModel(repositoryWith(Task(id = 1, title = "a")), taskId = 1)
+
+        assertTrue(viewModel.uiState.value.isLoading)
+    }
+
     @Test
     fun `exposes the requested task`() = runTest {
-        val repository = InMemoryTaskRepository(listOf(Task(id = 1, title = "写个详情页")))
-        val viewModel = TaskDetailViewModel(repository, taskId = 1)
+        val viewModel = TaskDetailViewModel(repositoryWith(Task(id = 1, title = "写个详情页")), taskId = 1)
 
-        viewModel.uiState.test {
-            assertTrue("订阅前应该是加载中", awaitItem().isLoading)
+        val loaded = viewModel.uiState.first { !it.isLoading }
 
-            val loaded = awaitItem()
-            assertEquals("写个详情页", loaded.task?.title)
-            assertFalse(loaded.isLoading)
-
-            cancelAndIgnoreRemainingEvents()
-        }
+        assertEquals("写个详情页", loaded.task?.title)
+        assertFalse(loaded.isLoading)
     }
 
     @Test
     fun `a missing task ends up as null instead of blowing up`() = runTest {
-        val repository = InMemoryTaskRepository()
-        val viewModel = TaskDetailViewModel(repository, taskId = 42)
+        val viewModel = TaskDetailViewModel(InMemoryTaskRepository(), taskId = 42)
 
-        viewModel.uiState.test {
-            skipItems(1) // 初始值
+        val loaded = viewModel.uiState.first { !it.isLoading }
 
-            val loaded = awaitItem()
-            assertNull(loaded.task)
-            assertFalse(loaded.isLoading)
-
-            cancelAndIgnoreRemainingEvents()
-        }
+        assertNull(loaded.task)
     }
 
     @Test
-    fun `setDone persists through the repository`() = runTest {
-        val repository = InMemoryTaskRepository(listOf(Task(id = 1, title = "a", done = false)))
+    fun `SetDone intent persists through the repository`() = runTest {
+        val repository = repositoryWith(Task(id = 1, title = "a", done = false))
         val viewModel = TaskDetailViewModel(repository, taskId = 1)
 
-        viewModel.setDone(done = true)
+        viewModel.onIntent(TaskDetailIntent.SetDone(done = true))
+        advanceUntilIdle()
 
         assertTrue(repository.observeTask(1).first()!!.done)
     }
 
     @Test
-    fun `delete removes the task`() = runTest {
-        val repository = InMemoryTaskRepository(listOf(Task(id = 1, title = "a")))
+    fun `Delete intent removes the task and emits an effect exactly once`() = runTest {
+        val repository = repositoryWith(Task(id = 1, title = "a"))
         val viewModel = TaskDetailViewModel(repository, taskId = 1)
 
-        viewModel.delete()
+        viewModel.effects.test {
+            viewModel.onIntent(TaskDetailIntent.Delete)
+            advanceUntilIdle()
+
+            // 效果是"每个事件只投递一次"——这正是用 Channel 而不是把
+            // "已删除"塞进 UiState 的理由（后者会在旋屏/重订阅时重放）。
+            assertEquals(TaskDetailEffect.TaskDeleted, awaitItem())
+
+            advanceUntilIdle()
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
 
         assertNull(repository.observeTask(1).first())
     }
