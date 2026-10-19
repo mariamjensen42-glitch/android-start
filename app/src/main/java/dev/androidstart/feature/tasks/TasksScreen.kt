@@ -1,0 +1,279 @@
+package dev.androidstart.feature.tasks
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import dev.androidstart.R
+import dev.androidstart.data.model.Task
+import dev.androidstart.ui.theme.AndroidStartTheme
+
+/**
+ * 任务列表页。
+ *
+ * 这个 Composable **只负责画**：状态从外面进来，事件用 lambda 抛出去。
+ * 没有 `viewModel()` 调用、没有仓库引用——所以它能被 Preview 和
+ * `createComposeRule()` 直接渲染，不需要任何 DI。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TasksScreen(
+    uiState: TasksUiState,
+    onAddTask: (String) -> Unit,
+    onToggleTask: (Long) -> Unit,
+    onTaskClick: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var showAddDialog by rememberSaveable { mutableStateOf(false) }
+
+    Scaffold(
+        modifier = modifier,
+        topBar = {
+            TopAppBar(
+                title = { Text(text = stringResource(R.string.tasks_title)) },
+                actions = {
+                    if (uiState.tasks.isNotEmpty()) {
+                        Text(
+                            text = stringResource(
+                                R.string.tasks_summary,
+                                uiState.tasks.size,
+                                uiState.completedCount,
+                            ),
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(end = 16.dp),
+                        )
+                    }
+                },
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showAddDialog = true }) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_add),
+                    contentDescription = stringResource(R.string.tasks_add),
+                )
+            }
+        },
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
+            when {
+                uiState.isLoading -> CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center),
+                )
+
+                uiState.tasks.isEmpty() -> EmptyState(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(32.dp),
+                )
+
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                ) {
+                    items(items = uiState.tasks, key = { task -> task.id }) { task ->
+                        TaskRow(
+                            task = task,
+                            onToggle = { onToggleTask(task.id) },
+                            onClick = { onTaskClick(task.id) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAddDialog) {
+        AddTaskDialog(
+            onDismiss = { showAddDialog = false },
+            onConfirm = { title ->
+                onAddTask(title)
+                showAddDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun TaskRow(
+    task: Task,
+    onToggle: () -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            // 整行可点，同时点击区域 ≥48dp，符合无障碍的最小触控尺寸。
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = task.done, onCheckedChange = { onToggle() })
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = task.title,
+            style = MaterialTheme.typography.bodyLarge,
+            textDecoration = if (task.done) TextDecoration.LineThrough else null,
+            color = if (task.done) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 12.dp),
+        )
+    }
+}
+
+@Composable
+private fun EmptyState(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.tasks_empty_title),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            text = stringResource(R.string.tasks_empty_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun AddTaskDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var title by rememberSaveable { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = stringResource(R.string.tasks_add)) },
+        text = {
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text(text = stringResource(R.string.task_title_hint)) },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(title) },
+                enabled = title.isNotBlank(),
+            ) {
+                Text(text = stringResource(R.string.action_create))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(R.string.action_cancel))
+            }
+        },
+    )
+
+    // 弹窗一出现就聚焦输入框，省掉一次多余的点击。
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+}
+
+// --- 预览 ------------------------------------------------------------------
+// 预览直接喂状态，不走 ViewModel：这样以后状态变多也不会把预览拖垮。
+
+private val PreviewTasks = listOf(
+    Task(id = 1, title = "接一个真实的数据源（Room / 网络）", done = false),
+    Task(id = 2, title = "把列表拆成独立 feature 模块", done = true),
+    Task(id = 3, title = "接上 CI", done = false),
+)
+
+@Preview(name = "列表 · 亮色", showBackground = true)
+@Composable
+private fun TasksScreenPreview() {
+    AndroidStartTheme(dynamicColor = false) {
+        TasksScreen(
+            uiState = TasksUiState(tasks = PreviewTasks, isLoading = false),
+            onAddTask = {},
+            onToggleTask = {},
+            onTaskClick = {},
+        )
+    }
+}
+
+@Preview(name = "列表 · 暗色", showBackground = true)
+@Composable
+private fun TasksScreenDarkPreview() {
+    AndroidStartTheme(darkTheme = true, dynamicColor = false) {
+        TasksScreen(
+            uiState = TasksUiState(tasks = PreviewTasks, isLoading = false),
+            onAddTask = {},
+            onToggleTask = {},
+            onTaskClick = {},
+        )
+    }
+}
+
+@Preview(name = "空状态", showBackground = true)
+@Composable
+private fun TasksScreenEmptyPreview() {
+    AndroidStartTheme(dynamicColor = false) {
+        TasksScreen(
+            uiState = TasksUiState(tasks = emptyList(), isLoading = false),
+            onAddTask = {},
+            onToggleTask = {},
+            onTaskClick = {},
+        )
+    }
+}

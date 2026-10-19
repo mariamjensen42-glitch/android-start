@@ -1,0 +1,25 @@
+# Gradle / 构建产物
+.gradle/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+local.properties
+
+# 签名材料：永远不进仓库
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.kotlin/
+
+# 系统垃圾
+.DS_Store
+Thumbs.db
+captures/
+.externalNativeBuild/
+.cxx/

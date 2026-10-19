@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      UI 全部由 Compose 绘制，这个平台主题只负责"窗口本身"：
+      启动瞬间的窗口底色、`enableEdgeToEdge()` 之前的系统栏行为。
+      换配色不要改这里，改 ui/theme/Theme.kt。
+    -->
+    <style name="Theme.AndroidStart" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

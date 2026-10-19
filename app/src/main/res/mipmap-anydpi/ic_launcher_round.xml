@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 24–25 的圆形图标兜底（与 mipmap-anydpi/ic_launcher.xml 同形）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:pathData="M24,2 A22,22 0 1,1 23.99,2 z"
+        android:fillColor="#FF2F5D3A" />
+    <path
+        android:pathData="M14,24 L21,31 L34,16"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

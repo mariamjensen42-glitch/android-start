@@ -1,0 +1,8 @@
+# 统一换行：仓库里一律 LF，Windows 脚本单独 CRLF。
+# 少了这段，Windows 上 clone 出来的 gradlew 会带 CRLF，在 Linux CI 里
+# 报 "bad interpreter: /bin/sh^M" —— 一类只在 CI 上出现的玄学问题。
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.jar binary
+*.png binary

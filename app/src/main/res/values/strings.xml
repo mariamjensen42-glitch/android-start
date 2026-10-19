@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Android Start</string>
+
+    <!-- 任务列表 -->
+    <string name="tasks_title">任务</string>
+    <string name="tasks_add">新建任务</string>
+    <string name="tasks_empty_title">还没有任务</string>
+    <string name="tasks_empty_body">点右下角的 + 建一个，或者等你接上真实的数据源。</string>
+    <string name="tasks_summary">%1$d 项，已完成 %2$d</string>
+
+    <!-- 任务详情 -->
+    <string name="task_detail_title">任务详情</string>
+    <string name="task_not_found">这个任务不存在，可能已经被删掉了。</string>
+    <string name="task_status_open">未完成</string>
+    <string name="task_status_done">已完成</string>
+    <string name="task_detail_hint">这里就是你要接着写的地方：加字段、接子任务、挂备注，都不用动导航和主题。</string>
+
+    <!-- 通用 -->
+    <string name="action_back">返回</string>
+    <string name="action_delete">删除</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_create">创建</string>
+    <string name="loading">加载中…</string>
+    <string name="task_title_hint">要做什么？</string>
+</resources>
