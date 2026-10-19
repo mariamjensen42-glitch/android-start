@@ -35,6 +35,12 @@ room = "2.8.5"
 kotlinxSerialization = "1.10.0"
 kotlinxCoroutines = "1.10.2"
 
+# 性能：Baseline Profile 插件与 macrobenchmark 库由同一个 androidx 项目发布，版本号同步。
+# 1.5.0 两边都是**稳定版**（插件也有稳定版，不必像 early 2026 那样只能用 alpha）。
+macrobenchmark = "1.5.0"
+uiautomator = "2.4.0"
+profileinstaller = "1.4.1"
+
 junit = "4.13.2"
 androidxTestJunit = "1.3.0"
 espresso = "3.7.0"
@@ -85,6 +91,13 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 
+# --- 性能（baseline profile + macrobenchmark） ------------------------------
+# 只在 :benchmarks 模块里用，不进 :app 的生产依赖。
+androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "macrobenchmark" }
+androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiautomator" }
+# 装/重置 profile 用；生成的 profile 靠它进 ART。
+androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
+
 # --- 测试 ------------------------------------------------------------------
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestJunit" }
@@ -101,3 +114,5 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 # 真要用 kapt 得换成 com.android.legacy-kapt，没有理由往回走）。
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+# 生成 Baseline Profile 的 Gradle 插件（配合 com.android.test 模块）。
+baselineprofile = { id = "androidx.baselineprofile", version.ref = "macrobenchmark" }

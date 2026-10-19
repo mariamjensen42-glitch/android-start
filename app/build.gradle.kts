@@ -6,6 +6,8 @@ plugins {
     // Room 与 Hilt 的代码生成都走 KSP。
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    // 生成 Baseline Profile（生成器在 :benchmarks 模块里）。
+    alias(libs.plugins.baselineprofile)
 }
 
 /**
@@ -49,6 +51,10 @@ android {
             optimization {
                 enable = true
             }
+            // 用 debug 签名：让 clone 下来的人**不需要任何密钥**就能装 release 变体，
+            // baseline profile 生成和 macrobenchmark 也都是跑在这个变体上。
+            // 上架前必须换成正式签名——见 README《上架前》清单。
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -73,6 +79,21 @@ android {
         // 只检查本模块源码，不递归检查依赖库（慢，且不是我们能修的）。
         checkDependencies = false
     }
+}
+
+/**
+ * Baseline Profile 的生成策略。
+ *
+ * `automaticGenerationDuringBuild = false` 是关键：否则 `assembleRelease` 会**要求一台设备**，
+ * 让"我只是想打个包"变成要起模拟器。生成只在手动跑
+ * `./gradlew :app:generateBaselineProfile` 时发生。
+ *
+ * `dexLayoutOptimization = true` 顺带产出 startup profile（dex 布局优化），
+ * 需要设备在安装时支持，老设备上会被忽略，不影响正确性。
+ */
+baselineProfile {
+    automaticGenerationDuringBuild = false
+    dexLayoutOptimization = true
 }
 
 dependencies {
@@ -104,6 +125,13 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.kotlinx.serialization.json)
+
+    // 生成的 baseline profile 靠它安装进 ART。AGP 通常已自动带上，
+    // 显式声明的理由是：换构建方式（如自定义 variant）时不至于静默丢 profile 安装能力。
+    implementation(libs.androidx.profileinstaller)
+
+    // 告诉 baseline profile 插件"生成器写在哪个模块"。
+    baselineProfile(project(":benchmarks"))
 
     // Compose 预览/检查工具只进 debug，不污染 release 体积。
     debugImplementation(libs.androidx.compose.ui.tooling)

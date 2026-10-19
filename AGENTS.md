@@ -18,6 +18,14 @@
 改动涉及 Room 实体、Hilt 模块、导航时，**先跑 `./gradlew assembleDebug`**：
 KSP 的报错（缺迁移、缺绑定、`@Assisted` 用法不对）都在这一步暴露，比等 lint 快得多。
 
+**要设备的命令**（都不在 DoD 里，别塞进日常流程）：
+
+```bash
+./gradlew connectedDebugAndroidTest        # Compose UI + Room DAO 测试
+./gradlew :app:generateBaselineProfile     # 重新生成 baseline profile（自起 GMD）
+./gradlew :benchmarks:connectedReleaseAndroidTest   # 量冷启动
+```
+
 **Definition of Done**：`./gradlew assembleDebug testDebugUnitTest lint` 三条全绿，
 且新增行为有对应的测试。没有测试的新逻辑要么补上，要么在 PR 里说明为什么测不了。
 
@@ -65,6 +73,8 @@ KSP 的报错（缺迁移、缺绑定、`@Assisted` 用法不对）都在这一�
 | 数据库实例怎么建 | `di/DatabaseModule.kt` |
 | 权限、Activity 配置 | `app/src/main/AndroidManifest.xml` |
 | 构建开关（minify、lint、compileSdk、KSP 参数） | `app/build.gradle.kts` |
+| 性能测试剧本 / 被测包名 | `benchmarks/src/main/java/dev/androidstart/benchmarks/`（包名只在 `TargetApp.kt`） |
+| Baseline Profile 产物 | `app/src/release/generated/baselineProfiles/`（**要提交**，不是构建垃圾） |
 
 **一处修改只散落在一处**——这是这个仓库最想守住的性质。如果你发现改一个东西要动 3 个文件，
 先停下来想清楚是不是抽象放错了位置，而不是硬改。
@@ -126,7 +136,14 @@ feature/*  ──▶  data (接口)  ◀──  RoomTaskRepository（data/local�
 3. 写 `HiltTestApplication` 并在 `testInstrumentationRunner` 里换成 `CustomTestRunner`
 4. 具体步骤照官方文档走，**不要**为了让测试跑起来改生产代码的注入方式
 
+### 改了首屏（主题 / DI 图 / 首屏 Compose 树 / 首屏数据源）
+1. 跑 `./gradlew :app:generateBaselineProfile`（自己起 GMD，不需要插真机）
+2. 把 `app/src/release/generated/baselineProfiles/baseline-prof.txt` 的变化一起提交
+3. 想验证收益就再跑 `./gradlew :benchmarks:connectedReleaseAndroidTest`，对比 `Partial` 与 `None`
+4. **不要**为了"保险"把生成任务挂进 `assemble` 或 CI 的自动流程——它要设备、要几分钟
+
 ### 加权限 / 系统能力
+
 1. Manifest 声明权限
 2. **必须**处理"用户拒绝"的路径（`ActivityResultContracts` + 拒绝后的降级 UI），不能只写成功分支
 3. 在 `strings.xml` 补一句"为什么需要"的用户文案
@@ -171,10 +188,12 @@ feature/*  ──▶  data (接口)  ◀──  RoomTaskRepository（data/local�
 - 唯一版本来源：`gradle/libs.versions.toml`。升级顺序：
   `agp` → `kotlin` → `ksp`（必须与 Kotlin 对齐）→ `hilt` / `room` → `composeBom` → 其余。
   catalog 顶部有完整的"版本咬合链"说明，动之前先读。
-- 两个已知的坑，别踩：
+- 三个已知的坑，别踩：
   - **hilt 不要随手升**：2.59 是第一个支持 AGP 9 的版本（2.58 及以前在 AGP 9 上直接报错）；
     2.60.x 要求 `kotlin-stdlib 2.3.21`，会顶掉 Kotlin 2.3.20，进而让 KSP 2.3.12 配不上。
   - **KSP 版本不是"取最新"**：它必须与 Kotlin 同版本线（KSP 2.3.12 ↔ Kotlin 2.3.20）。
+  - **`androidx.baselineprofile` 插件与 `benchmark-macro-junit4` 共用一个版本号**（现在都是 1.5.0），
+    只升其中一个会出现插件与运行时不匹配。
 - AGP 9 起 Kotlin 编译内建在 AGP 里：**不要**再应用 `org.jetbrains.kotlin.android`，
   `kotlinOptions {}` 已废弃，改用 `kotlin { compilerOptions { } }`。
   注解处理一律走 KSP，**不要**用 kapt（与内建 Kotlin 不兼容，真要用得换成 `com.android.legacy-kapt`）。
@@ -191,6 +210,9 @@ feature/*  ──▶  data (接口)  ◀──  RoomTaskRepository（data/local�
 - ❌ 在 `feature/*Screen.kt` 里调 `hiltViewModel()` / `viewModel()`（只有 `navigation/` 可以）
 - ❌ ViewModel 里出现 `Context`、`TaskEntity`、`TaskDao`（要 Context 说明职责放错了层）
 - ❌ 带着 `fallbackToDestructiveMigration` 上架（升级会静默清空用户数据）
+- ❌ 把 `generateBaselineProfile` 挂进 `assemble` 或 CI 自动流程（会要求设备）
+- ❌ 改 `applicationId` 而不同步 `benchmarks/.../TargetApp.kt` 的 `TARGET_PACKAGE`
+- ❌ 把 `app/src/release/generated/baselineProfiles/` 加进 `.gitignore`（那是产物进包的东西）
 - ❌ 在构建脚本里写死依赖版本（一律走 catalog）
 - ❌ 第二个 `Activity`（页面切换一律走 Nav3 路由）
 - ❌ `GlobalScope`、`runBlocking`（测试里除外）、`Thread.sleep`

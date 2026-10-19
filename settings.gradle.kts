@@ -24,3 +24,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "android-start"
 include(":app")
+// 性能模块：生成 Baseline Profile + 跑 macrobenchmark。不产出可安装的 App，
+// 只在手动触发时才需要设备（见 README 的《性能》一节）。
+include(":benchmarks")

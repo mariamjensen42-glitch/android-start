@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  com.android.test 模块的 manifest 只是个占位：AGP 会补上测试所需的
+  instrumentation 与 <queries>。真正要声明的权限/组件都在 :app 里。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />
