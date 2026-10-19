@@ -170,6 +170,10 @@ feature/*  ──▶  data (接口)  ◀──  RoomTaskRepository（data/local�
 - 类名名词，函数名动词短语；`Boolean` 属性用 `is`/`has` 前缀（`isLoading`、`hasError`）。
 - 一个 Composable 一个职责。超过 ~120 行的 Composable 拆成私有 Composable，**不要**拆成工具函数。
 - Composable 私有成员放文件末尾，顺序：公开 Composable → 私有 Composable → Preview。
+- **文件组织：一屏一个 `XxxViewModel.kt`**，里面放 `XxxUiState` + `XxxIntent`（+ `XxxEffect`）+ ViewModel；
+  屏幕文件里放 `XxxScreen` + 私有 Composable + Preview。三者是**一起变**的，拆开只会让"加一个动作"从改 1 个文件变成改 3 个。
+  什么时候才拆出 `XxxContract.kt`：单文件 > 250 行、Intent > 10 个、或契约被第二处消费（共享 UI 组件 / 独立测试模块）。
+  屏幕文件超过 ~300 行时，先挪 Preview（`XxxScreenPreviews.kt`），别拆契约。
 - 所有面向用户的字符串走 `stringResource`；`contentDescription` 必须给（纯装饰才用 `null`）。
 - 日志：只在失败路径打，且带可搜的关键字。不要 `println`。
 - 注释解释**为什么**，不解释**是什么**。看到"// 设置 title"这种就删掉。
