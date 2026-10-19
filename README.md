@@ -7,6 +7,31 @@
 > vibestart 本身是全栈 TypeScript 脚手架，移动端只有 Expo（React Native），**不覆盖** Kotlin/Compose。
 > 这个工程补的就是那块空白。
 
+## 用它开始
+
+点右上角 **Use this template** → *Create a new repository*，然后 clone 下来做三件事：
+
+1. **改名**：7 处，见文末《改名清单》
+2. **验证**：`./gradlew assembleDebug testDebugUnitTest lint` 必须绿——先有绿，再写业务
+3. **装机**：`./gradlew installDebug`
+
+完整命令（含设备测试、性能、上架前）见下面的《5 分钟跑起来》。
+
+## 状态：哪些跑过、哪些还没
+
+诚实标注比 "production ready" 有用 —— 拿到模板的人应该知道哪里需要自己确认（截至 2026-10）：
+
+| 路径 | 状态 |
+|---|---|
+| `:app:assembleDebug`（Hilt + Room + KSP 全链路） | ✅ 真实构建通过，APK 与 Room schema 均产出 |
+| `:app:assembleDebugAndroidTest` | ✅ 编译通过 |
+| `:app:testDebugUnitTest` | ⚠️ 20 个用例已按 MVI 重写，**待复跑确认** |
+| `:app:lint` | ⚠️ 从未执行 |
+| `:benchmarks:assemble` / `generateBaselineProfile` / macrobenchmark | ⚠️ 配置已接线，**未执行过** |
+| release（R8 + `@Serializable` 路由 + Room 生成代码） | ⚠️ 未装机冒烟 |
+
+> 复跑全绿后请把这张表里的 ⚠️ 换成 ✅ 并把日期改掉——这就是模板的"验证徽章"。
+
 ## 里面有什么
 
 | 关注点 | 选择 | 为什么 |
