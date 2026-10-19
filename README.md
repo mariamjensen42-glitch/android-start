@@ -19,18 +19,20 @@
 
 ## 状态：哪些跑过、哪些还没
 
-诚实标注比 "production ready" 有用 —— 拿到模板的人应该知道哪里需要自己确认（截至 2026-10）：
+诚实标注比 "production ready" 有用 —— 拿到模板的人应该知道哪里需要自己确认（截至 2026-10-19，本地完整跑过）：
 
 | 路径 | 状态 |
 |---|---|
-| `:app:assembleDebug`（Hilt + Room + KSP 全链路） | ✅ 真实构建通过，APK 与 Room schema 均产出 |
+| `:app:assembleDebug`（Hilt + Room + KSP 全链路） | ✅ 构建通过，APK 与 Room schema 均产出 |
 | `:app:assembleDebugAndroidTest` | ✅ 编译通过 |
-| `:app:testDebugUnitTest` | ⚠️ 20 个用例已按 MVI 重写，**待复跑确认** |
-| `:app:lint` | ⚠️ 从未执行 |
-| `:benchmarks:assemble` / `generateBaselineProfile` / macrobenchmark | ⚠️ 配置已接线，**未执行过** |
-| release（R8 + `@Serializable` 路由 + Room 生成代码） | ⚠️ 未装机冒烟 |
+| `:app:testDebugUnitTest` | ✅ **20 个用例全绿**（仓库 6 / 列表 7 / 详情 7） |
+| `:app:lint` | ✅ 0 error；11 warning 全是"有新版本可用"与 `OldTargetApi`——版本是刻意钉住的（见《版本这条链别乱动》） |
+| `:benchmarks:assemble` | ✅ 编译通过 |
+| `release`（R8 + `@Serializable` 路由 + Room 生成代码） | ✅ `assembleRelease -PallowDebugSigning` 通过（debug 12.4 MB → release 1.4 MB，R8 确实生效）；⚠️ **未装机冒烟** |
+| `generateBaselineProfile` / macrobenchmark | ⚠️ 需要设备（Gradle Managed Device），**未执行过** |
 
-> 复跑全绿后请把这张表里的 ⚠️ 换成 ✅ 并把日期改掉——这就是模板的"验证徽章"。
+> 前三行可以随时用 `./gradlew assembleDebug assembleDebugAndroidTest testDebugUnitTest lint` 复现；
+> 标 ⚠️ 的两项需要设备，跑通后请把日期一并更新。
 
 ## 里面有什么
 

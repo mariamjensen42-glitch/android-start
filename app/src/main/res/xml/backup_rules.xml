@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 及以下的备份规则（12+ 走 data_extraction_rules.xml）。
+  两个文件都显式排除全部：模板不替使用者决定"哪些数据可以被云备份带走"。
+  注意 fullBackupContent 是在 allowBackup=true 时才生效；
+  这里保留它是为了让 24~30 上的行为与 31+ 保持一致。
+-->
+<full-backup-content>
+    <exclude domain="root" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="external" path="." />
+</full-backup-content>

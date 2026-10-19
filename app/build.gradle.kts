@@ -32,8 +32,12 @@ ksp {
  *   ./gradlew :app:generateBaselineProfile -PallowDebugSigning
  * flag 名字本身就在提醒你：这是本地临时用途，不是发布配置。
  */
-val allowDebugSigningForRelease =
-    providers.gradleProperty("allowDebugSigning").orNull?.toBooleanStrictOrNull() ?: false
+// `-PallowDebugSigning`（不带值）在 Gradle 里是空字符串，直接 toBooleanStrictOrNull() 会得到 null
+// 从而被当成 false —— 那个 bug 的表现是"带了 flag 仍然产出 unsigned APK"。
+// 所以语义定为：**出现即开启**，显式写 =false 才关闭。
+val allowDebugSigningForRelease = providers.gradleProperty("allowDebugSigning").orNull
+    ?.let { it.isEmpty() || it.toBoolean() }
+    ?: false
 
 android {
     namespace = "dev.androidstart"
