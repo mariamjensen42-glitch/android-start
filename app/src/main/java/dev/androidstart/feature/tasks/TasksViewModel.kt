@@ -1,12 +1,11 @@
 package dev.androidstart.feature.tasks
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
+import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.androidstart.data.TaskRepository
 import dev.androidstart.data.model.Task
+import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -28,9 +27,13 @@ data class TasksUiState(
 
 /**
  * 列表页 ViewModel：**只做**状态编排，不碰 Context、不碰 Android 类，
- * 所以它能在纯 JVM 单测里被直接 new 出来（见 TasksViewModelTest）。
+ * 也不碰 Room 的实体类型（它只认识 [Task]）。
+ *
+ * `@HiltViewModel` 让 Hilt 负责创建它；构造参数只有一个接口，
+ * 所以单测里 new 出来也不用任何容器（见 TasksViewModelTest）。
  */
-class TasksViewModel(
+@HiltViewModel
+class TasksViewModel @Inject constructor(
     private val repository: TaskRepository,
 ) : ViewModel() {
 
@@ -38,7 +41,8 @@ class TasksViewModel(
      * 仓库的变化流 → UI 状态。
      *
      * `WhileSubscribed(5000)`：屏幕不可见 5 秒后停止收集，切回来立刻恢复。
-     * 写 `SharingStarted.Eagerly` 会让后台的页面也一直在跑，是常见电耗来源。
+     * 写 `SharingStarted.Eagerly` 会让后台的页面也一直在跑（也会一直占着 Room 的查询），
+     * 是常见电耗来源。
      */
     val uiState: StateFlow<TasksUiState> = repository.observeTasks()
         .map { tasks -> TasksUiState(tasks = tasks, isLoading = false) }
@@ -59,15 +63,7 @@ class TasksViewModel(
         viewModelScope.launch { repository.setDone(id, done = !task.done) }
     }
 
-    companion object {
-        private const val STOP_TIMEOUT_MILLIS = 5_000L
-
-        /**
-         * 手动 DI 的工厂。调用点：`viewModel(factory = TasksViewModel.factory(repo))`。
-         * 换成 Hilt 时删掉这个函数，改标注解即可，构造签名不变。
-         */
-        fun factory(repository: TaskRepository): ViewModelProvider.Factory = viewModelFactory {
-            initializer { TasksViewModel(repository) }
-        }
+    private companion object {
+        const val STOP_TIMEOUT_MILLIS = 5_000L
     }
 }

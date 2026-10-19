@@ -1,18 +1,36 @@
 ##
 ## 唯一版本来源。改版本只改这里，构建脚本里不出现任何硬编码版本号。
 ##
-## 升级顺序：先升 agp → 同步 kotlin（KSP/Kotlin/AGP 三者要合得来）→ 再升 androidx。
+## 这里的版本不是"各自取最新"，而是一条**互相咬合的链**，动一个要先看链条：
+##
+##   AGP 9.3.3  ──内建 Kotlin 编译──▶  Kotlin 2.3.20
+##                                        │
+##                     KSP 必须与 Kotlin 同版本 │（KSP 2.3.12 的 pom 依赖 kotlin-stdlib 2.3.20）
+##                                        ▼
+##                                   KSP 2.3.12 ──▶ Room 2.8.5 / Hilt 2.59.2
+##
+## 两个刻意的"不取最新"：
+## 1. hilt 停在 2.59.2：2.59 是第一个支持 AGP 9 的 Hilt Gradle 插件版本（2.58 及以前在 AGP 9 上直接报错）；
+##    2.60.x 把 kotlin-stdlib 要求抬到 2.3.21，会把 Kotlin 顶到 2.3.21 → KSP 2.3.12 就配不上了。
+## 2. ksp 停在 2.3.12：它的 pom 依赖 kotlin-stdlib 2.3.20，正好等于本项目 Kotlin。
+##
+## 升级顺序：agp → kotlin → ksp（与 kotlin 对齐）→ hilt/room → composeBom → 其余。
 ## 升完必须跑 README 里那三条命令，绿了再提交。
 ##
 [versions]
 agp = "9.3.3"
 kotlin = "2.3.20"
+ksp = "2.3.12"
 
 coreKtx = "1.19.0"
 lifecycle = "2.11.0"
 activityCompose = "1.13.0"
 composeBom = "2026.09.00"
 navigation3 = "1.2.0"
+
+hilt = "2.59.2"
+androidxHilt = "1.4.0"
+room = "2.8.5"
 
 kotlinxSerialization = "1.10.0"
 kotlinxCoroutines = "1.10.2"
@@ -50,6 +68,19 @@ androidx-lifecycle-viewmodel-navigation3 = { group = "androidx.lifecycle", name 
 androidx-navigation3-runtime = { group = "androidx.navigation3", name = "navigation3-runtime", version.ref = "navigation3" }
 androidx-navigation3-ui = { group = "androidx.navigation3", name = "navigation3-ui", version.ref = "navigation3" }
 
+# --- 依赖注入（Hilt） -------------------------------------------------------
+hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
+hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
+# Nav3 场景下拿 ViewModel 用这个（`androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel`），
+# 不要用 hilt-navigation-compose —— 那个是配 Navigation 2 的，跟 Nav3 的 ViewModelStore 装饰器不是一套。
+androidx-hilt-lifecycle-viewmodel-compose = { group = "androidx.hilt", name = "hilt-lifecycle-viewmodel-compose", version.ref = "androidxHilt" }
+
+# --- 持久化（Room） ---------------------------------------------------------
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+# Flow / 协程支持。
+androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+
 # --- Kotlin 生态 -----------------------------------------------------------
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
@@ -66,3 +97,7 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 # 这两个插件分别只负责 Compose 编译器与 kotlinx.serialization 代码生成。
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+# Room 与 Hilt 的代码生成都走 KSP（不要用 kapt：AGP 9 的内建 Kotlin 跟 kapt 不兼容，
+# 真要用 kapt 得换成 com.android.legacy-kapt，没有理由往回走）。
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }

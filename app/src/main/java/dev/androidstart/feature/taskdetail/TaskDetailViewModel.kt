@@ -1,10 +1,11 @@
 package dev.androidstart.feature.taskdetail
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
+import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.androidstart.data.TaskRepository
 import dev.androidstart.data.model.Task
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,9 +23,20 @@ data class TaskDetailUiState(
     val isLoading: Boolean = true,
 )
 
-class TaskDetailViewModel(
+/**
+ * 详情页 ViewModel。
+ *
+ * 它需要一个**运行时才知道的参数**（taskId），而 Hilt 是在编译期建图的，
+ * 所以用 Assisted Injection：`repository` 由 Hilt 给，`taskId` 由调用方传。
+ *
+ * 另一种常见做法是 `SavedStateHandle.get<Long>("taskId")`，
+ * 但它要求导航参数先被塞进 SavedStateHandle——Nav3 的路由是类型安全的 data class，
+ * 走 assisted injection 更直接，也不会出现"key 拼错了只在运行时炸"的问题。
+ */
+@HiltViewModel(assistedFactory = TaskDetailViewModel.Factory::class)
+class TaskDetailViewModel @AssistedInject constructor(
     private val repository: TaskRepository,
-    private val taskId: Long,
+    @Assisted private val taskId: Long,
 ) : ViewModel() {
 
     val uiState: StateFlow<TaskDetailUiState> = repository.observeTask(taskId)
@@ -43,12 +55,16 @@ class TaskDetailViewModel(
         viewModelScope.launch { repository.delete(taskId) }
     }
 
-    companion object {
-        private const val STOP_TIMEOUT_MILLIS = 5_000L
+    /**
+     * Hilt 用这个工厂创建 ViewModel；调用点在 `AppNavigation` 里：
+     * `hiltViewModel<TaskDetailViewModel, TaskDetailViewModel.Factory>(creationCallback = { it.create(route.taskId) })`
+     */
+    @AssistedFactory
+    interface Factory {
+        fun create(taskId: Long): TaskDetailViewModel
+    }
 
-        fun factory(repository: TaskRepository, taskId: Long): ViewModelProvider.Factory =
-            viewModelFactory {
-                initializer { TaskDetailViewModel(repository, taskId) }
-            }
+    private companion object {
+        const val STOP_TIMEOUT_MILLIS = 5_000L
     }
 }

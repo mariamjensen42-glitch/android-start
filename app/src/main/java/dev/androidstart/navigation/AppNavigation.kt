@@ -3,15 +3,14 @@ package dev.androidstart.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import dev.androidstart.di.AppContainer
 import dev.androidstart.feature.taskdetail.TaskDetailScreen
 import dev.androidstart.feature.taskdetail.TaskDetailViewModel
 import dev.androidstart.feature.tasks.TasksScreen
@@ -32,7 +31,7 @@ data object TasksRoute : NavKey
 data class TaskDetailRoute(val taskId: Long) : NavKey
 
 /**
- * 全应用的导航宿主。
+ * 全应用的导航宿主，也是**唯一**可以调用 `hiltViewModel()` 的地方。
  *
  * 加页面的三个动作，缺一不可：
  * 1. 上面加一个 `@Serializable` 路由；
@@ -40,10 +39,7 @@ data class TaskDetailRoute(val taskId: Long) : NavKey
  * 3. 在发起方 `backStack.add(...)`。
  */
 @Composable
-fun AppNavDisplay(
-    container: AppContainer,
-    modifier: Modifier = Modifier,
-) {
+fun AppNavDisplay(modifier: Modifier = Modifier) {
     // 返回栈跨配置变更与进程死亡自动恢复（因为 key 都可序列化）。
     val backStack = rememberNavBackStack(TasksRoute)
 
@@ -55,15 +51,14 @@ fun AppNavDisplay(
         // 这两个装饰器缺一不可：
         // - SaveableStateHolder：每个页面的 rememberSaveable 各存各的；
         // - ViewModelStore：每个 NavEntry 一份 ViewModel，返回时状态还在。
+        //   少了它 hiltViewModel() 拿到的会是整个返回栈共享的实例。
         entryDecorators = listOf(
             rememberSaveableStateHolderNavEntryDecorator(),
             rememberViewModelStoreNavEntryDecorator(),
         ),
         entryProvider = entryProvider {
             entry<TasksRoute> {
-                val viewModel: TasksViewModel = viewModel(
-                    factory = TasksViewModel.factory(container.taskRepository),
-                )
+                val viewModel: TasksViewModel = hiltViewModel()
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
                 TasksScreen(
@@ -75,8 +70,9 @@ fun AppNavDisplay(
             }
 
             entry<TaskDetailRoute> { route ->
-                val viewModel: TaskDetailViewModel = viewModel(
-                    factory = TaskDetailViewModel.factory(container.taskRepository, route.taskId),
+                // 需要运行时参数的 ViewModel：用 assisted factory 把 taskId 递进去。
+                val viewModel = hiltViewModel<TaskDetailViewModel, TaskDetailViewModel.Factory>(
+                    creationCallback = { factory -> factory.create(route.taskId) },
                 )
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
